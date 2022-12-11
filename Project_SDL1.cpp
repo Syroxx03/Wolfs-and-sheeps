@@ -115,9 +115,9 @@ void movingObject::goToward(int x, int y)
 /////////////////////////////////////////////
 void movingObject::runAway(renderedObject* vMO) { this->runAway(vMO->getXBox(), vMO->getYBox()); }
 void movingObject::runAway(int x, int y)
-{ 
+{
     this->xVelocity_ = this->getXBox() - x;
-    this->yVelocity_ = this->getYBox() - y;  
+    this->yVelocity_ = this->getYBox() - y;
     this->adjustVelocitys();
 }
 /////////////////////////////////////////////
@@ -152,25 +152,34 @@ void movingObject::adjustVelocitys()
 /////////////////////////////////////////////
 void movingObject::interact(renderedObject* pO2)
 {
-    if (this->hasPropertie("wolf") && pO2->hasPropertie("prey"))
+    if (this->hasPropertie("prey"))
     {
-        if (this->overlap(pO2))
+        if(pO2->hasPropertie("wolf") && this->getDistance(pO2) < 200)   
+            this->runAway(pO2);
+        else if (this->hasPropertie("canprocreate") && this->hasPropertie("male")
+            && pO2->hasPropertie("canprocreate") && pO2->hasPropertie("female") && this->overlap(pO2))
+        {
+            this->removePropertie("canprocreate");
+            pO2->removePropertie("canprocreate");
+            pO2->addPropertie("pregnant");
+        }
+    }
+    if (this->hasPropertie("wolf"))
+    {
+        if (pO2->hasPropertie("shepherd") && this->getDistance(pO2) < 150)
+        {
+            this->addPropertie("scared");
+            this->runAway(pO2);
+        }
+        else if (this->overlap(pO2) && pO2->hasPropertie("prey"))
         {
             this->addPropertie("eat");
             pO2->addPropertie("dead");
-        } 
-        else
+        }
+        else if (!this->hasPropertie("scared") && pO2->hasPropertie("prey"))
             ((wolf*)this)->choosePrey(pO2);
     }
-    if (this->hasPropertie("prey") && pO2->hasPropertie("wolf") && this->getDistance(pO2) < 200)
-        this->runAway(pO2);
-    if (this->hasPropertie("canprocreate") && this->hasPropertie("male")
-        && pO2->hasPropertie("canprocreate") && pO2->hasPropertie("female") && this->overlap(pO2))
-    {
-        this->removePropertie("canprocreate");
-        pO2->removePropertie("canprocreate");
-        pO2->addPropertie("pregnant");
-    }
+    
 }
 /////////////////////////////////////////////
 void movingObject::move()
@@ -285,6 +294,7 @@ void wolf::update()
     this->draw();
     this->updateTimeBeforeStarve();
     this->preyDistance_ = -1;
+    this->removePropertie("scared");
 }
 /////////////////////////////////////////////
 void wolf::updateTimeBeforeStarve()
