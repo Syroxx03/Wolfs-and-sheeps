@@ -141,6 +141,7 @@ public:
 class sheep : public animatedObject, public movingObject
 {
 private:
+    int timeBeforeProcreate_;
     static int ImgW;
     static int ImgH;
 
@@ -151,6 +152,7 @@ public:
     sheep(SDL_Surface* window_surface_ptr, int x, int y);
     sheep(SDL_Surface* window_surface_ptr);
 
+    void updateTimeBeforeProcreate();
     void update() override;
 };
 //*****************************************************************************

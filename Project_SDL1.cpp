@@ -164,6 +164,13 @@ void movingObject::interact(renderedObject* pO2)
     }
     if (this->hasPropertie("prey") && pO2->hasPropertie("wolf") && this->getDistance(pO2) < 200)
         this->runAway(pO2);
+    if (this->hasPropertie("canprocreate") && this->hasPropertie("male")
+        && pO2->hasPropertie("canprocreate") && pO2->hasPropertie("female") && this->overlap(pO2))
+    {
+        this->removePropertie("canprocreate");
+        pO2->removePropertie("canprocreate");
+        pO2->addPropertie("pregnant");
+    }
 }
 /////////////////////////////////////////////
 void movingObject::move()
@@ -330,7 +337,8 @@ int sheep::ImgH = 60;
 sheep::sheep(SDL_Surface* window_surface_ptr, int x, int y) :
     renderedObject("media/sheep.png", window_surface_ptr, sheep::ImgW, sheep::ImgH, x, y), animatedObject(10), movingObject(3)
 {
-    this->properties_ = {"sheep", "prey", "male"};
+    this->timeBeforeProcreate_ = 0;
+    this->properties_ = {"sheep", "prey", "canprocreate", (rand() % 2 ? "male" : "female") };
     this->setSurfaceMap();
 }
 /////////////////////////////////////////////
@@ -338,9 +346,27 @@ sheep::sheep(SDL_Surface* window_surface_ptr) :
     sheep(window_surface_ptr, (rand() % (frame_width - sheep::ImgW)), (rand() % (frame_height - sheep::ImgH)))
 {}
 /////////////////////////////////////////////
+void sheep::update()
+{
+    this->move();
+    this->updateFrameDuration();
+    this->draw();
+    this->updateTimeBeforeProcreate();
+}
+/////////////////////////////////////////////
+void sheep::updateTimeBeforeProcreate()
+{
+    this->timeBeforeProcreate_--;
+    if (this->timeBeforeProcreate_ == 0 && !this->hasPropertie("canprocreate"))
+        this->addPropertie("canprocreate");
+    else if (!this->hasPropertie("canprocreate") && this->timeBeforeProcreate_ < 0)
+        this->timeBeforeProcreate_ = 500;
+}
+    
+/////////////////////////////////////////////
 std::map<std::string, std::vector<std::string>> sheep::getPathMap()
 {
-    std::string p = "media/sheeps/";
+    std::string p = (this->hasPropertie("female") ? "media/sheepsF/" : "media/sheepsM/");
     std::vector<std::string> vPNW, vPNE, vPSW, vPSE;
     for (int i = 1; i <= 10; i++)
     {
@@ -360,13 +386,7 @@ std::string sheep::getImageKey()
     if (this->xVelocity_ <= 0 && this->yVelocity_ <= 0) { return "nw"; }
     return "ne";
 }
-/////////////////////////////////////////////
-void sheep::update()
-{
-    this->move();
-    this->updateFrameDuration();
-    this->draw();
-}
+
 //*****************************************************************************
 //******************************** APPLICATION ********************************
 //*****************************************************************************
