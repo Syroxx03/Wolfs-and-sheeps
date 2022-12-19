@@ -14,10 +14,13 @@ constexpr int FPS = 60;
 class object
 {
 protected:
+    std::map<std::string, int> values_;
     std::vector<std::string> properties_;
 public:
     object();
-
+    bool hasValue(std::string pKey);
+    int getValue(std::string pKey);
+    void setValue(std::string pKey, int pValue);
     bool hasPropertie(std::string pPropertie);
     bool removePropertie(std::string pPropertie);//True if removed
     void addPropertie(std::string pPropertie);
@@ -37,7 +40,7 @@ protected:
     int y_;
 
 public:
-    renderedObject(const std::string& file_path, SDL_Surface* window_surface_ptr, int width, int height, int x, int y);
+    renderedObject(SDL_Surface* image_ptr, SDL_Surface* window_surface_ptr, int width, int height, int x, int y);
     renderedObject() = default;
 
     int getX();
@@ -69,12 +72,14 @@ public:
     bool canMoveX();
     bool canMoveY();
     void adjustVelocitys();
-    void interact(renderedObject* pO2);
     void runAway(renderedObject* pO2);
     void runAway(int x, int y);
     void goToward(renderedObject* pO2);
     void goToward(int x, int y);
     void move();
+
+    virtual void update() = 0;
+    virtual void interact(renderedObject* pO2) = 0;
 };
 //*****************************************************************************
 // ***************************** ANIMATED OBJECT ******************************
@@ -87,8 +92,7 @@ protected:
     int frameInterval_;//Nombre d'appelle de update avant d'updateImage
     int frameIndex_;
 
-    void setSurfaceMap();
-    virtual std::map<std::string, std::vector<std::string>> getPathMap() = 0;
+    static std::map<std::string, std::vector<SDL_Surface*>> createSurfaceMap(std::map<std::string, std::vector<std::string>>);
     virtual std::string getImageKey() = 0;
 
 public:
@@ -96,6 +100,7 @@ public:
 
     void updateFrameDuration();
     void nextFrame();
+
     virtual void update() = 0;
 };
 //*****************************************************************************
@@ -104,6 +109,7 @@ public:
 class shepherd : public movingObject
 {
 private:
+    static SDL_Surface* ShepherdImage;
     static int ImgW;
     static int ImgH;
     void move();
@@ -112,6 +118,7 @@ public:
     shepherd(SDL_Surface* window_surface_ptr);
 
     void update();
+    void interact(renderedObject* pO2);
 };
 //*****************************************************************************
 // **********************************  WOLF ***********************************
@@ -119,21 +126,21 @@ public:
 class wolf : public animatedObject, public movingObject
 {
 private:
-    int preyDistance_;
-    int timeBeforeStarve_;
+    static std::map<std::string, std::vector<SDL_Surface*>> WolfImages;
+    static SDL_Surface* WolfImage;
     static int ImgW;
     static int ImgH;
 
     std::string getImageKey();
-    std::map<std::string, std::vector<std::string>> getPathMap();
+    static std::map<std::string, std::vector<std::string>> createPathMap();
 
 public:
     wolf(SDL_Surface* window_surface_ptr, int x, int y);
     wolf(SDL_Surface* window_surface_ptr);
 
-    void choosePrey(renderedObject* pO2);
     void updateTimeBeforeStarve();
     void update() override;
+    void interact(renderedObject* pO2);
 };
 //*****************************************************************************
 // ********************************** SHEEP **********************************
@@ -141,19 +148,21 @@ public:
 class sheep : public animatedObject, public movingObject
 {
 private:
-    int timeBeforeProcreate_;
+    static std::map<std::string, std::vector<SDL_Surface*>> SheepImagesM;
+    static std::map<std::string, std::vector<SDL_Surface*>> SheepImagesF;
+    static SDL_Surface* SheepImage;
     static int ImgW;
     static int ImgH;
 
     std::string getImageKey();
-    std::map<std::string, std::vector<std::string>> getPathMap();
+    static std::map<std::string, std::vector<std::string>> createPathMap(std::string pGender);
 
 public:
     sheep(SDL_Surface* window_surface_ptr, int x, int y);
     sheep(SDL_Surface* window_surface_ptr);
 
-    void updateTimeBeforeProcreate();
     void update() override;
+    void interact(renderedObject* pO2);
 };
 //*****************************************************************************
 // ********************************** GROUND **********************************
@@ -170,6 +179,7 @@ public:
     void addMovingObject(movingObject* pO);
     void drawGround();
     void update();
+    void makeInteract();
     void updateObjects();
     void removeDeads();
     void addNews();

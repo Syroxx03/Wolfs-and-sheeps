@@ -5,30 +5,27 @@
 #include <numeric>
 #include <random>
 #include <string>
-// Defining a namespace without a name -> Anonymous workspace
-// Its purpose is to indicate to the compiler that everything
-// inside of it is UNIQUELY used within this source file.
-namespace
-{
-    SDL_Surface* load_surface_for(const std::string& path, SDL_Surface* window_surface_ptr)
-    {
-        SDL_Surface* loadedSurface = IMG_Load(path.c_str());
-        if (loadedSurface == NULL)
-            throw std::runtime_error("Unable to load image " + std::string(path.c_str()));
-        //Convert surface to screen format
-        SDL_Surface* optimizedSurface = SDL_ConvertSurface(loadedSurface, window_surface_ptr->format, 0);
-        if (optimizedSurface == NULL)
-            throw std::runtime_error("Unable to optimize image!");
-        SDL_FreeSurface(loadedSurface);
-        return optimizedSurface;
-    }
-} // namespace
 
 //*****************************************************************************
 // ********************************* OBJECT ***********************************
 //*****************************************************************************
 object::object()
 {}
+/////////////////////////////////////////////
+bool object::hasValue(std::string pKey)
+{
+    return this->values_.count(pKey);
+}
+/////////////////////////////////////////////
+int object::getValue(std::string pKey)
+{
+    return this->values_[pKey];
+}
+/////////////////////////////////////////////
+void object::setValue(std::string pKey, int pValue)
+{
+    this->values_[pKey] = pValue;
+}
 /////////////////////////////////////////////
 void object::addPropertie(std::string pPropertie)
 {
@@ -53,17 +50,16 @@ bool object::removePropertie(std::string pPropertie)
 //*****************************************************************************
 // ***************************** RENDERED OBJECT ******************************
 //*****************************************************************************
-renderedObject::renderedObject(const std::string& file_path, SDL_Surface* window_surface_ptr, int width, int height, int x, int y) :
+renderedObject::renderedObject(SDL_Surface* image_ptr, SDL_Surface* window_surface_ptr, int width, int height, int x, int y) :
     object()
 {
-    this->image_ptr_ = load_surface_for(file_path, window_surface_ptr);
+    this->image_ptr_ = image_ptr;
     this->window_surface_ptr_ = window_surface_ptr;
     this->width_ = width;
     this->height_ = height;
     this->x_ = x;
     this->y_ = y;
 }
-/////////////////////////////////////////////
 int renderedObject::getHeightBox() { return this->height_ * 4 / 5; }
 int renderedObject::getWidthBox() { return this->width_ / 2; }
 int renderedObject::getXBox() { return this->x_ + (this->width_ - this->getWidthBox()) / 2; }
@@ -150,38 +146,6 @@ void movingObject::adjustVelocitys()
         this->setRandomVelocitys();
 }
 /////////////////////////////////////////////
-void movingObject::interact(renderedObject* pO2)
-{
-    if (this->hasPropertie("prey"))
-    {
-        if(pO2->hasPropertie("wolf") && this->getDistance(pO2) < 200)   
-            this->runAway(pO2);
-        else if (this->hasPropertie("canprocreate") && this->hasPropertie("male")
-            && pO2->hasPropertie("canprocreate") && pO2->hasPropertie("female") && this->overlap(pO2))
-        {
-            this->removePropertie("canprocreate");
-            pO2->removePropertie("canprocreate");
-            pO2->addPropertie("pregnant");
-        }
-    }
-    if (this->hasPropertie("wolf"))
-    {
-        if (pO2->hasPropertie("shepherd") && this->getDistance(pO2) < 150)
-        {
-            this->addPropertie("scared");
-            this->runAway(pO2);
-        }
-        else if (this->overlap(pO2) && pO2->hasPropertie("prey"))
-        {
-            this->addPropertie("eat");
-            pO2->addPropertie("dead");
-        }
-        else if (!this->hasPropertie("scared") && pO2->hasPropertie("prey"))
-            ((wolf*)this)->choosePrey(pO2);
-    }
-    
-}
-/////////////////////////////////////////////
 void movingObject::move()
 {
     if (!canMoveX() || !canMoveY())
@@ -194,24 +158,10 @@ void movingObject::move()
 //*****************************************************************************
 animatedObject::animatedObject(int frameInterval)
 {
+    
     this->frameInterval_ = frameInterval;
     this->frameDuration_ = frameInterval;
     this->frameIndex_ = 0;
-}
-/////////////////////////////////////////////
-void animatedObject::setSurfaceMap()
-{
-    std::map<std::string, std::vector<std::string>> pathMap = this->getPathMap();
-    std::map<std::string, std::vector<std::string>>::iterator it;
-    for (it = pathMap.begin(); it != pathMap.end(); it++)
-    {
-        std::string vKey = it->first;
-        std::vector<std::string> vPaths = it->second;
-        std::vector<SDL_Surface*> vSurfaces = {};
-        for (std::string vPath : vPaths)
-            vSurfaces.push_back(load_surface_for(vPath, this->window_surface_ptr_));
-        this->images_.insert({ vKey,vSurfaces });
-    }
 }
 /////////////////////////////////////////////
 void animatedObject::updateFrameDuration()
@@ -230,15 +180,34 @@ void animatedObject::nextFrame()
     this->image_ptr_ = this->images_.at(imageKey)[this->frameIndex_];
     this->frameDuration_ = 0;
 }
+/////////////////////////////////////////////
+std::map<std::string, std::vector<SDL_Surface*>>
+animatedObject::createSurfaceMap(std::map<std::string, std::vector<std::string>> pPathMap)
+{
+    std::map<std::string, std::vector<SDL_Surface*>> surfaceMap;
+    std::map<std::string, std::vector<std::string>>::iterator it;
+    for (it = pPathMap.begin(); it != pPathMap.end(); it++)
+    {
+        std::string vKey = it->first;
+        std::vector<std::string> vPaths = it->second;
+        std::vector<SDL_Surface*> vSurfaces = {};
+        for (std::string vPath : vPaths)
+            vSurfaces.push_back(IMG_Load(vPath.c_str()));
+        surfaceMap.insert({ vKey,vSurfaces });
+    }
+    return surfaceMap;
+}
 //*****************************************************************************
 // ********************************* SHEPERD **********************************
 //*****************************************************************************
+SDL_Surface* shepherd::ShepherdImage  = IMG_Load("media/shepherd.png");
 int shepherd::ImgW = 49;
 int shepherd::ImgH = 49;
+//*****************************************************************************
 shepherd::shepherd(SDL_Surface* window_surface_ptr) :
-    renderedObject("media/shepherd.png", window_surface_ptr, shepherd::ImgW, shepherd::ImgH, frame_width / 2, frame_height / 2), movingObject(4)
+    renderedObject(ShepherdImage, window_surface_ptr, shepherd::ImgW, shepherd::ImgH, frame_width / 2, frame_height / 2), movingObject(4)
 {
-    this->properties_ = { "shepherd" };
+    this->properties_ = {"shepherd"};
 }
 /////////////////////////////////////////////
 void shepherd::update()
@@ -246,6 +215,9 @@ void shepherd::update()
     this->move();
     this->draw();
 }
+/////////////////////////////////////////////
+void shepherd::interact(renderedObject* pO2)
+{}
 /////////////////////////////////////////////
 void shepherd::move()
 {
@@ -273,15 +245,18 @@ void shepherd::move()
 //*****************************************************************************
 //*********************************** WOLF ************************************
 //*****************************************************************************
+std::map<std::string, std::vector<SDL_Surface*>> wolf::WolfImages = wolf::createSurfaceMap(wolf::createPathMap());
+SDL_Surface* wolf::WolfImage = IMG_Load("media/wolf.png");
 int wolf::ImgW = 157;
 int wolf::ImgH = 110;
+//*****************************************************************************
 wolf::wolf(SDL_Surface* window_surface_ptr, int x, int y) :
-    renderedObject("media/wolf.png", window_surface_ptr, wolf::ImgW, wolf::ImgH, x, y), animatedObject(4), movingObject(4)
+    renderedObject(WolfImage, window_surface_ptr, wolf::ImgW, wolf::ImgH, x, y), animatedObject(4), movingObject(4)
 {
-    this->preyDistance_ = -1;
-    this->timeBeforeStarve_ = 500;
+    this->images_ = WolfImages;
+    this->values_.insert({ "preyDistance", -1 });
+    this->values_.insert({ "timeBeforeStarve", 400 });
     this->properties_ = { "wolf" };
-    this->setSurfaceMap();
 }
 /////////////////////////////////////////////
 wolf::wolf(SDL_Surface* window_surface_ptr) :
@@ -293,30 +268,41 @@ void wolf::update()
     this->updateFrameDuration();
     this->draw();
     this->updateTimeBeforeStarve();
-    this->preyDistance_ = -1;
+    this->values_["preyDistance"]=-1;
     this->removePropertie("scared");
+}
+/////////////////////////////////////////////
+void wolf::interact(renderedObject* pO2)
+{
+    if (pO2->hasPropertie("shepherd") && this->getDistance(pO2) < 150)
+    {
+        this->addPropertie("scared");
+        this->runAway(pO2);
+    }
+    else if (this->overlap(pO2) && pO2->hasPropertie("prey"))
+    {
+        this->setValue("timeBeforeStarve", 400);
+        pO2->addPropertie("dead");
+    }
+    else if (!this->hasPropertie("scared") && pO2->hasPropertie("prey"))
+    {
+        int distance = this->getDistance(pO2);
+        if (this->values_["preyDistance"] == -1 || this->values_["preyDistance"] > distance)
+        {
+            this->values_["preyDistance"] = distance;
+            this->goToward(pO2);
+        }
+    }
 }
 /////////////////////////////////////////////
 void wolf::updateTimeBeforeStarve()
 {
-    this->timeBeforeStarve_--;
-    if (this->removePropertie("eat"))
-        this->timeBeforeStarve_ = 500;
-    else if (this->timeBeforeStarve_ <= 0)
+    this->values_["timeBeforeStarve"]--;  
+    if (this->values_["timeBeforeStarve"] <= 0)
         this->addPropertie("dead");
 }
 /////////////////////////////////////////////
-void wolf::choosePrey(renderedObject* pO2)
-{
-    int distance = this->getDistance(pO2);
-    if (this->preyDistance_ == -1 || this->preyDistance_ > distance)
-    {
-        this->preyDistance_ = distance;
-        this->goToward(pO2);
-    }
-}
-/////////////////////////////////////////////
-std::map<std::string, std::vector<std::string>> wolf::getPathMap()
+std::map<std::string, std::vector<std::string>> wolf::createPathMap()
 {
     std::string p = "media/wolfs/";
     std::vector<std::string> vPNW, vPNE, vPSW, vPSE;
@@ -338,18 +324,21 @@ std::string wolf::getImageKey()
     if (this->xVelocity_ <= 0 && this->yVelocity_ <= 0) { return "nw"; }
     return "ne";
 }
-
 //*****************************************************************************
 //*********************************** SHEEP ***********************************
 //*****************************************************************************
+std::map<std::string, std::vector<SDL_Surface*>> sheep::SheepImagesM = sheep::createSurfaceMap(sheep::createPathMap("male"));
+std::map<std::string, std::vector<SDL_Surface*>> sheep::SheepImagesF = sheep::createSurfaceMap(sheep::createPathMap("female"));
+SDL_Surface* sheep::SheepImage = IMG_Load("media/sheep.png");
 int sheep::ImgW = 68;
 int sheep::ImgH = 60;
+//*****************************************************************************
 sheep::sheep(SDL_Surface* window_surface_ptr, int x, int y) :
-    renderedObject("media/sheep.png", window_surface_ptr, sheep::ImgW, sheep::ImgH, x, y), animatedObject(10), movingObject(3)
+    renderedObject(SheepImage, window_surface_ptr, sheep::ImgW, sheep::ImgH, x, y), animatedObject(10), movingObject(3)
 {
-    this->timeBeforeProcreate_ = 0;
+    this->values_.insert({"timeBeforeProcreate" , 0});
     this->properties_ = {"sheep", "prey", "canprocreate", (rand() % 2 ? "male" : "female") };
-    this->setSurfaceMap();
+    this->images_ = (this->hasPropertie("female") ? SheepImagesF : SheepImagesM);
 }
 /////////////////////////////////////////////
 sheep::sheep(SDL_Surface* window_surface_ptr) :
@@ -361,22 +350,27 @@ void sheep::update()
     this->move();
     this->updateFrameDuration();
     this->draw();
-    this->updateTimeBeforeProcreate();
+    this->values_["timeBeforeProcreate"]--;
 }
 /////////////////////////////////////////////
-void sheep::updateTimeBeforeProcreate()
+void sheep::interact(renderedObject* pO2)
 {
-    this->timeBeforeProcreate_--;
-    if (this->timeBeforeProcreate_ == 0 && !this->hasPropertie("canprocreate"))
-        this->addPropertie("canprocreate");
-    else if (!this->hasPropertie("canprocreate") && this->timeBeforeProcreate_ < 0)
-        this->timeBeforeProcreate_ = 500;
+    //Run away a wolf
+    if (pO2->hasPropertie("wolf") && this->getDistance(pO2) < 200)
+        this->runAway(pO2);
+    //Reproduce
+    else if (this->hasPropertie("male") && pO2->hasPropertie("female") && this->overlap(pO2)
+         && this->getValue("timeBeforeProcreate") <= 0 && pO2->getValue("timeBeforeProcreate") <= 0)
+    {
+        this->setValue("timeBeforeProcreate", 500);
+        pO2->setValue("timeBeforeProcreate", 500);
+        pO2->addPropertie("pregnant");
+    }
 }
-    
 /////////////////////////////////////////////
-std::map<std::string, std::vector<std::string>> sheep::getPathMap()
+std::map<std::string, std::vector<std::string>> sheep::createPathMap(std::string pGender)
 {
-    std::string p = (this->hasPropertie("female") ? "media/sheepsF/" : "media/sheepsM/");
+    std::string p = (pGender == "female" ? "media/sheepsF/" : "media/sheepsM/");
     std::vector<std::string> vPNW, vPNE, vPSW, vPSE;
     for (int i = 1; i <= 10; i++)
     {
@@ -396,7 +390,6 @@ std::string sheep::getImageKey()
     if (this->xVelocity_ <= 0 && this->yVelocity_ <= 0) { return "nw"; }
     return "ne";
 }
-
 //*****************************************************************************
 //******************************** APPLICATION ********************************
 //*****************************************************************************
@@ -413,7 +406,7 @@ void application::setGround(int n_sheep, int n_wolf)
     this->ground_ = new ground(this->window_surface_ptr_);
     for (int sheepNbr = 0; sheepNbr < n_sheep; sheepNbr++)
         this->ground_->addMovingObject(new sheep(this->window_surface_ptr_));
-    for (int sheepNbr = 0; sheepNbr < n_wolf; sheepNbr++)
+    for (int wolfNbr = 0; wolfNbr < n_wolf; wolfNbr++)
         this->ground_->addMovingObject(new wolf(this->window_surface_ptr_));
     this->ground_->addMovingObject(new shepherd(this->window_surface_ptr_));
 }
@@ -430,10 +423,12 @@ void application::loop(int duration)
             if (e.type == SDL_QUIT)
                 exit(0); 
         //Update screen
+        int startTimeUpdate = SDL_GetTicks();
         this->ground_->update();
+        int updateDuration = SDL_GetTicks() - startTimeUpdate;
         SDL_UpdateWindowSurface(this->window_ptr_);
         //Wait
-        SDL_Delay(1000 / FPS);
+        SDL_Delay(std::max(0, 1000 / FPS - updateDuration));
     }
 }
 //*****************************************************************************
@@ -453,6 +448,7 @@ void ground::addMovingObject(movingObject* pO)
 void ground::update()
 {
     this->drawGround();
+    this->makeInteract();
     this->updateObjects();
     this->removeDeads();
     this->addNews();
@@ -464,27 +460,33 @@ void ground::drawGround()
     SDL_FillRect(this->window_surface_ptr_, &vRect, 0x04A88D);
 }
 /////////////////////////////////////////////
+void ground::makeInteract()
+{
+    for (int vO1 = 0; vO1 < this->movingObjects_.size()-1; vO1++)
+        for (int vO2 = vO1 + 1; vO2 < this->movingObjects_.size(); vO2++)
+        {
+            this->movingObjects_[vO1]->interact(this->movingObjects_[vO2]);
+            this->movingObjects_[vO2]->interact(this->movingObjects_[vO1]);
+        }
+}
+/////////////////////////////////////////////
 void ground::updateObjects()
 {
-    for (movingObject* vMovingObject : this->movingObjects_)
-    {
-        for (movingObject* vMovingObject2 : this->movingObjects_)
-            if (vMovingObject2 != vMovingObject)
-                vMovingObject->interact(vMovingObject2);
-        vMovingObject->update();
-    }
+    for(movingObject* vMO: this->movingObjects_)
+        vMO->update();
 }
 /////////////////////////////////////////////
 void ground::removeDeads()
 {
     std::vector<movingObject*>::iterator it = this->movingObjects_.begin();
     while (it != this->movingObjects_.end())
-    {
         if ((*it)->hasPropertie("dead"))
+        {
+            //delete(*it);
             it = this->movingObjects_.erase(it);
+        }
         else
             it++;
-    }
 }
 /////////////////////////////////////////////
 void ground::addNews()
